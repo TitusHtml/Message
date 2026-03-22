@@ -3,25 +3,31 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Private Chat – Titus & Friend</title>
+  <title>Private P2P Chat – Just Us</title>
   <style>
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
       background: #f0f2f5;
       margin: 0;
-      padding: 0;
       height: 100vh;
       display: flex;
       flex-direction: column;
     }
     header {
-      background: #0084ff;
+      background: #007AFF;
       color: white;
-      padding: 14px 16px;
+      padding: 14px;
       text-align: center;
       font-weight: 600;
       font-size: 19px;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+    }
+    #status {
+      padding: 10px 16px;
+      background: #fff5f5;
+      color: #d00;
+      font-size: 13px;
+      text-align: center;
+      border-bottom: 1px solid #fcc;
     }
     #messages {
       flex: 1;
@@ -29,122 +35,154 @@
       padding: 16px;
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      gap: 10px;
     }
     .msg {
-      max-width: 78%;
+      max-width: 75%;
       padding: 10px 14px;
       border-radius: 18px;
-      line-height: 1.4;
-      position: relative;
+      line-height: 1.35;
       word-wrap: break-word;
+      color: white;
     }
     .msg.sent {
       align-self: flex-end;
-      background: #11ff00;
-      color: rgb(0, 0, 0);
+      background: #34C759; /* green for your messages */
       border-bottom-right-radius: 4px;
     }
     .msg.received {
       align-self: flex-start;
-      background: rgb(88, 147, 234);
-      color: black;
+      background: #007AFF; /* blue for friend's messages */
       border-bottom-left-radius: 4px;
-      box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+      box-shadow: 0 1px 2px rgba(0,0,0,0.15);
     }
     .msg .name {
       font-weight: 600;
       font-size: 13px;
       opacity: 0.9;
-      margin-bottom: 3px;
+      margin-bottom: 4px;
       display: block;
     }
     .msg .time {
       font-size: 11px;
-      opacity: 0.7;
+      opacity: 0.75;
       margin-top: 4px;
       display: block;
       text-align: right;
     }
+    #setup, #chat-area {
+      padding: 16px;
+      background: white;
+      border-top: 1px solid #ddd;
+    }
+    textarea {
+      width: 100%;
+      height: 80px;
+      margin: 8px 0;
+      padding: 8px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      font-family: monospace;
+      font-size: 13px;
+    }
+    button {
+      background: #007AFF;
+      color: white;
+      border: none;
+      padding: 10px 16px;
+      border-radius: 20px;
+      cursor: pointer;
+      margin: 4px 0;
+    }
+    button:hover { background: #0062cc; }
     #input-area {
       display: flex;
+      gap: 10px;
       padding: 12px 16px;
       background: white;
       border-top: 1px solid #ddd;
-      gap: 10px;
     }
     #name {
-      width: 110px;
-      padding: 10px 12px;
+      width: 120px;
+      padding: 10px;
       border: 1px solid #ccc;
       border-radius: 20px;
-      font-size: 15px;
     }
     #message {
       flex: 1;
       padding: 10px 16px;
       border: 1px solid #ccc;
       border-radius: 20px;
-      font-size: 15px;
-      outline: none;
     }
-    button {
-      background: #0084ff;
+    #send {
+      background: #007AFF;
       color: white;
       border: none;
       border-radius: 50%;
       width: 44px;
       height: 44px;
       font-size: 20px;
-      cursor: pointer;
-      flex-shrink: 0;
-    }
-    button:hover { background: #0073e6; }
-    #status {
-      text-align: center;
-      padding: 8px;
-      font-size: 13px;
-      color: #555;
-      background: #fff9e6;
-      border-bottom: 1px solid #ffe8a3;
     }
   </style>
 </head>
 <body>
 
-  <header>Private Chat</header>
+  <header>Private P2P Chat</header>
 
-  <div id="status">Both need this page open to see messages • Works best on same Wi-Fi</div>
+  <div id="status">Connection: Not started. Follow steps below to connect with your friend.</div>
 
   <div id="messages"></div>
 
-  <div id="input-area">
-    <input id="name" placeholder="Your name" value="Titus" />
-    <input id="message" placeholder="Type a message…" autocomplete="off" />
-    <button id="send">➤</button>
+  <div id="setup">
+    <p><strong>Step 1:</strong> Decide who is "Initiator" (one of you). The other is "Joiner".</p>
+    <p><strong>Step 2:</strong> Click your role button below.</p>
+
+    <button onclick="startAs('initiator')">I am the Initiator</button>
+    <button onclick="startAs('joiner')">I am the Joiner</button>
+
+    <h4>Local Description (copy this after clicking your role)</h4>
+    <textarea id="localDesc" readonly></textarea>
+
+    <h4>Paste friend's description here</h4>
+    <textarea id="remoteDesc"></textarea>
+    <button onclick="setRemote()">Paste & Connect</button>
+  </div>
+
+  <div id="chat-area" style="display:none;">
+    <div id="input-area">
+      <input id="name" placeholder="Your name" value="Titus" />
+      <input id="message" placeholder="Type a message…" autocomplete="off" />
+      <button id="send">➤</button>
+    </div>
   </div>
 
   <script>
-    const channel = new BroadcastChannel('private-chat-channel');
-
+    let pc = null;
+    let dc = null;
+    const status = document.getElementById('status');
     const messagesDiv = document.getElementById('messages');
-    const nameInput   = document.getElementById('name');
-    const msgInput    = document.getElementById('message');
-    const sendBtn     = document.getElementById('send');
+    const localDesc = document.getElementById('localDesc');
+    const remoteDesc = document.getElementById('remoteDesc');
+    const setupDiv = document.getElementById('setup');
+    const chatDiv = document.getElementById('chat-area');
 
-    function addMessage(name, text, isSent = false) {
+    const config = {
+      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+    };
+
+    function addMessage(name, text, isSent) {
       const div = document.createElement('div');
       div.className = `msg ${isSent ? 'sent' : 'received'}`;
 
       const nameEl = document.createElement('span');
       nameEl.className = 'name';
-      nameEl.textContent = name || 'Anonymous';
+      nameEl.textContent = name || 'Someone';
 
       const textEl = document.createTextNode(text);
 
       const timeEl = document.createElement('span');
       timeEl.className = 'time';
-      timeEl.textContent = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+      timeEl.textContent = new Date().toLocaleTimeString([], {hour: 'numeric', minute:'2-digit'});
 
       div.appendChild(nameEl);
       div.appendChild(textEl);
@@ -154,37 +192,93 @@
       messagesDiv.scrollTop = messagesDiv.scrollHeight;
     }
 
-    // Receive messages from the other person
-    channel.onmessage = (e) => {
-      const { name, text } = e.data;
-      addMessage(name, text, false);
-    };
+    function initConnection(isInitiator) {
+      pc = new RTCPeerConnection(config);
 
-    // Send message
-    function send() {
-      const text = msgInput.value.trim();
-      if (!text) return;
+      pc.onicecandidate = e => {
+        if (!e.candidate) {
+          localDesc.value = JSON.stringify(pc.localDescription);
+          status.textContent = 'Connection: Offer/Answer ready. Copy the box above to your friend.';
+        }
+      };
 
-      const name = nameInput.value.trim() || 'Anonymous';
+      pc.ondatachannel = e => {
+        dc = e.channel;
+        setupChannel();
+      };
 
-      channel.postMessage({ name, text });
-      addMessage(name, text, true);   // show it to yourself too
-
-      msgInput.value = '';
-      msgInput.focus();
+      if (isInitiator) {
+        dc = pc.createDataChannel('chat');
+        setupChannel();
+      }
     }
 
-    sendBtn.onclick = send;
+    function setupChannel() {
+      dc.onopen = () => {
+        status.textContent = 'Connected! You can now chat.';
+        setupDiv.style.display = 'none';
+        chatDiv.style.display = 'flex';
+        addMessage('', 'Connection established. Start typing!', false);
+      };
+      dc.onmessage = e => {
+        const data = JSON.parse(e.data);
+        addMessage(data.name, data.text, false);
+      };
+    }
 
-    msgInput.addEventListener('keypress', e => {
-      if (e.key === 'Enter') {
+    function startAs(role) {
+      const isInitiator = role === 'initiator';
+      initConnection(isInitiator);
+
+      if (isInitiator) {
+        pc.createOffer()
+          .then(offer => pc.setLocalDescription(offer))
+          .catch(err => console.error(err));
+      } else {
+        status.textContent = 'Waiting for friend’s offer. Paste it in the box below when received.';
+      }
+    }
+
+    function setRemote() {
+      const text = remoteDesc.value.trim();
+      if (!text) return alert('Paste something first!');
+
+      try {
+        const desc = JSON.parse(text);
+        pc.setRemoteDescription(new RTCSessionDescription(desc))
+          .then(() => {
+            if (desc.type === 'offer') {
+              pc.createAnswer()
+                .then(answer => pc.setLocalDescription(answer))
+                .catch(err => console.error(err));
+            }
+          })
+          .catch(err => console.error(err));
+      } catch (e) {
+        alert('Invalid format. Make sure it\'s the full JSON from your friend.');
+      }
+    }
+
+    // Send message
+    document.getElementById('send').onclick = () => {
+      const text = document.getElementById('message').value.trim();
+      if (!text || !dc || dc.readyState !== 'open') return;
+
+      const name = document.getElementById('name').value.trim() || 'Anonymous';
+      const payload = JSON.stringify({ name, text });
+
+      dc.send(payload);
+      addMessage(name, text, true);
+
+      document.getElementById('message').value = '';
+    };
+
+    document.getElementById('message').addEventListener('keypress', e => {
+      if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
-        send();
+        document.getElementById('send').click();
       }
     });
-
-    // Optional: welcome message
-    addMessage('', "Chat started. Your friend needs to open this page too.", false);
   </script>
 
 </body>

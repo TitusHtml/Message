@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Short P2P Chat</title>
+  <style>
+    body { font-family: sans-serif; margin:0; height:100vh; display:flex; flex-direction:column; background:#f0f2f5; }
+    #messages { flex:1; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:8px; }
+    .msg { max-width:70%; padding:10px 14px; border-radius:18px; color:white; }
+    .sent { align-self:flex-end; background:#34C759; border-bottom-right-radius:4px; }
+    .received { align-self:flex-start; background:#007AFF; border-bottom-left-radius:4px; }
+    #setup, #chat { padding:16px; background:white; border-top:1px solid #ddd; }
+    textarea { width:100%; height:60px; margin:8px 0; font-family:monospace; }
+    button { padding:8px 16px; background:#007AFF; color:white; border:none; border-radius:20px; margin:4px; }
+    #input { display:flex; gap:8px; }
+    #message { flex:1; padding:10px; border:1px solid #ccc; border-radius:20px; }
+    #send { width:44px; height:44px; border-radius:50%; font-size:20px; }
+  </style>
+</head>
+<body>
+
+<div id="messages"></div>
+
+<div id="setup">
+  <button onclick="init(true)">Create Offer (you start)</button>
+  <button onclick="init(false)">Paste Offer (friend starts)</button>
+  <h4>Copy this after clicking button:</h4>
+  <textarea id="sdp" readonly></textarea>
+  <h4>Paste friend's text here:</h4>
+  <textarea id="remote"></textarea>
+  <button onclick="connect()">Connect</button>
+</div>
+
+<div id="chat" style="display:none;">
+  <div id="input">
+    <input id="msg" placeholder="Type..." autocomplete="off">
+    <button id="send">➤</button>
+  </div>
+</div>
+
+<script>
+  let pc, dc;
+  const config = { iceServers: [{urls: 'stun:stun.l.google.com:19302'}] };
+
+  function log(txt) { 
+    const div = document.createElement('div'); 
+    div.textContent = txt; 
+    document.getElementById('messages').appendChild(div); 
+  }
+
+  function addMsg(text, isSent) {
+    const div = document.createElement('div');
+    div.className = `msg ${isSent ? 'sent' : 'received'}`;
+    div.textContent = text;
+    document.getElementById('messages').appendChild(div);
+    div.scrollIntoView();
+  }
+
+  function init(isOfferer) {
+    pc = new RTCPeerConnection(config);
+    
+    pc.onicecandidate = e => {
+      if (!e.candidate) document.getElementById('sdp').value = JSON.stringify(pc.localDescription);
+    };
+
+    if (isOfferer) {
+      dc = pc.createDataChannel('chat');
+      dc.onopen = () => { document.getElementById('setup').style.display='none'; document.getElementById('chat').style.display='block'; };
+      dc.onmessage = e => addMsg(e.data, false);
+      pc.createOffer().then(o => pc.setLocalDescription(o));
+    } else {
+      pc.ondatachannel = e => {
+        dc = e.channel;
+        dc.onopen = () => { document.getElementById('setup').style.display='none'; document.getElementById('chat').style.display='block'; };
+        dc.onmessage = e => addMsg(e.data, false);
+      };
+    }
+  }
+
+  function connect() {
+    const sdp = JSON.parse(document.getElementById('remote').value);
+    pc.setRemoteDescription(sdp).then(() => {
+      if (sdp.type === 'offer') {
+        pc.createAnswer().then(a => pc.setLocalDescription(a));
+      }
+    });
+  }
+
+  document.getElementById('send').onclick = () => {
+    const text = document.getElementById('msg').value.trim();
+    if (text && dc) {
+      dc.send(text);
+      addMsg(text, true);
+      document.getElementById('msg').value = '';
+    }
+  };
+
+  document.getElementById('msg').onkeypress = e => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      document.getElementById('send').click();
+    }
+  };
+</script>
+</body>
+</html>
